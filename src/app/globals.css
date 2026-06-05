@@ -1,26 +1,263 @@
 @import "tailwindcss";
 
-:root {
-  --background: #ffffff;
-  --foreground: #171717;
+@theme {
+  --color-background: #131313;
+  --color-foreground: #ece1d5; /* Chalk/cream off-white for sketch paper contrast */
+  
+  --color-surface: #131313;
+  --color-surface-container: #1b1b1b;
+  --color-surface-container-high: #242424;
+  --color-surface-container-highest: #2e2e2e;
+  --color-surface-container-lowest: #0e0e0e;
+  
+  --color-primary-arc: #adc6ff;    /* Arc Blue */
+  --color-secondary-arc: #d0bcff;  /* Lavender Purple */
+  --color-tertiary-arc: #bec6e0;   /* Muted grayish blue */
+  --color-outline-arc: #8c909f;    /* Pencil Grey outline */
+  --color-outline-variant-arc: #424754;
+  
+  --font-inter: var(--font-inter);
+  --font-mono: var(--font-mono);
+  --font-sketch: var(--font-sketch);
+  --font-marker: var(--font-marker);
+  --font-caveat: var(--font-caveat);
+  
+  --animate-float: float 4s ease-in-out infinite;
+  --animate-wiggle-cat: wiggle-cat 3s ease-in-out infinite;
+  --animate-zzz: zzz 2s ease-in-out infinite;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px) rotate(0deg);
+  }
+  50% {
+    transform: translateY(-8px) rotate(1deg);
   }
 }
 
+@keyframes wiggle-cat {
+  0%, 100% {
+    transform: scale(1) rotate(0deg);
+  }
+  50% {
+    transform: scale(1.03) rotate(-1.5deg);
+  }
+}
+
+@keyframes zzz {
+  0% {
+    opacity: 0;
+    transform: translateY(0px) scale(0.6) rotate(0deg);
+  }
+  50% {
+    opacity: 0.8;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-24px) scale(1.2) rotate(-15deg);
+  }
+}
+
+:root {
+  --background: #131313;
+  --foreground: #ece1d5;
+}
+
 body {
-  background: var(--background);
+  background-color: var(--background);
   color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter), sans-serif;
+  overflow-x: hidden;
+}
+
+/* Blueprint / Grid Overlay */
+.blueprint-bg {
+  background-image: 
+    linear-gradient(rgba(140, 144, 159, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(140, 144, 159, 0.05) 1px, transparent 1px);
+  background-size: 24px 24px;
+}
+
+/* Sketch Box */
+.sketch-card {
+  border: 2px solid #8c909f;
+  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+  background-color: #1b1b1b;
+  box-shadow: 4px 4px 0px 0px #8c909f;
+  transition: all 0.2s ease-in-out;
+}
+
+.sketch-card:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px #adc6ff; /* Primary Arc blue shadow on hover */
+  border-color: #adc6ff;
+}
+
+.sketch-card-secondary {
+  border: 2px solid #8c909f;
+  border-radius: 15px 225px 15px 255px/255px 15px 225px 15px;
+  background-color: #1b1b1b;
+  box-shadow: 4px 4px 0px 0px #8c909f;
+  transition: all 0.2s ease-in-out;
+}
+
+.sketch-card-secondary:hover {
+  transform: translate(-2px, -2px);
+  box-shadow: 6px 6px 0px 0px #d0bcff; /* Purple secondary shadow on hover */
+  border-color: #d0bcff;
+}
+
+.sketch-card-flat {
+  border: 2px dashed #8c909f;
+  border-radius: 8px;
+  background-color: transparent;
+}
+
+/* Custom sketch button */
+.sketch-btn {
+  border: 2px solid #8c909f;
+  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+  padding: 0.5rem 1.25rem;
+  font-weight: 600;
+  transition: all 0.15s ease-in-out;
+  box-shadow: 3px 3px 0px 0px #8c909f;
+  background-color: #1b1b1b;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+}
+
+.sketch-btn:hover {
+  transform: translate(-1px, -1px);
+  box-shadow: 4px 4px 0px 0px #adc6ff;
+  border-color: #adc6ff;
+  color: #adc6ff;
+}
+
+.sketch-btn:active {
+  transform: translate(2px, 2px);
+  box-shadow: 0px 0px 0px 0px #adc6ff;
+}
+
+.sketch-btn-primary {
+  border: 2px solid #adc6ff;
+  background-color: rgba(173, 198, 255, 0.1);
+  color: #adc6ff;
+  box-shadow: 3px 3px 0px 0px #adc6ff;
+}
+
+.sketch-btn-primary:hover {
+  background-color: rgba(173, 198, 255, 0.2);
+  box-shadow: 4px 4px 0px 0px #adc6ff;
+}
+
+.sketch-btn-purple {
+  border: 2px solid #d0bcff;
+  background-color: rgba(208, 188, 255, 0.1);
+  color: #d0bcff;
+  box-shadow: 3px 3px 0px 0px #d0bcff;
+}
+
+.sketch-btn-purple:hover {
+  background-color: rgba(208, 188, 255, 0.2);
+  box-shadow: 4px 4px 0px 0px #d0bcff;
+  color: #d0bcff;
+}
+
+/* Custom sketch input */
+.sketch-input {
+  border: 2px solid #8c909f;
+  border-radius: 255px 15px 225px 15px/15px 225px 15px 255px;
+  background-color: #131313;
+  padding: 0.75rem 1rem;
+  color: #ece1d5;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.sketch-input:focus {
+  border-color: #adc6ff;
+  box-shadow: 0 0 0 1px #adc6ff;
+}
+
+/* Hand-drawn sketchy lines */
+.sketch-line {
+  position: relative;
+}
+
+.sketch-line::after {
+  content: "";
+  position: absolute;
+  bottom: -2px;
+  left: 0;
+  width: 100%;
+  height: 4px;
+  background: url("data:image/svg+xml,%3Csvg viewBox='0%200%20100%2010'%20xmlns='http://www.w3.org/2000/svg'%3E%3Cpath%20d='M0,5%20Q25,2%2050,5%20T100,5'%20stroke='%238c909f'%20stroke-width='2'%20fill='none'/%3E%3C/svg%3E") repeat-x;
+  background-size: 100px 4px;
+}
+
+.sketch-line-blue::after {
+  background: url("data:image/svg+xml,%3Csvg viewBox='0%200%20100%2010'%20xmlns='http://www.w3.org/2000/svg'%3E%3Cpath%20d='M0,5%20Q25,2%2050,5%20T100,5'%20stroke='%23adc6ff'%20stroke-width='2'%20fill='none'/%3E%3C/svg%3E") repeat-x;
+}
+
+/* Sticker */
+.sticker {
+  display: inline-block;
+  padding: 0.25rem 0.75rem;
+  font-family: var(--font-sketch), cursive;
+  font-weight: bold;
+  border: 1.5px solid #8c909f;
+  background-color: #242424;
+  border-radius: 4px;
+  box-shadow: 2px 2px 0px 0px #8c909f;
+  transform: rotate(-2deg);
+}
+
+.sticker-blue {
+  background-color: rgba(173, 198, 255, 0.15);
+  border-color: #adc6ff;
+  color: #adc6ff;
+  box-shadow: 2px 2px 0px 0px #adc6ff;
+}
+
+.sticker-purple {
+  background-color: rgba(208, 188, 255, 0.15);
+  border-color: #d0bcff;
+  color: #d0bcff;
+  box-shadow: 2px 2px 0px 0px #d0bcff;
+}
+
+/* Scrollbar styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: #131313;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #2e2e2e;
+  border: 2px solid #131313;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #424754;
+}
+
+/* Light Theme Inversion Hack */
+html.light {
+  filter: invert(1) hue-rotate(180deg);
+  background-color: #ececec;
+}
+
+html.light img,
+html.light canvas,
+html.light video {
+  filter: invert(1) hue-rotate(180deg);
 }
