@@ -297,6 +297,25 @@ export default function IntroPage() {
 
         </div>
       </div>
+
+      {/* ─── Footer ─── */}
+      <footer className="relative z-20 w-full flex flex-col items-center justify-center py-6 mt-auto border-t border-[#424754]/30">
+        <div className="flex flex-col items-center gap-2">
+          {/* Social Links (Placeholder) */}
+          <div className="flex items-center gap-4 text-[#8c909f] mb-1">
+            <a href="https://x.com/dexi269" target="_blank" rel="noopener noreferrer" className="hover:text-[#ece1d5] transition-colors" aria-label="X (Twitter)">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231zm-1.161 17.52h1.833L7.084 4.126H5.117z"/>
+              </svg>
+            </a>
+          </div>
+          
+          {/* Founder Attribution */}
+          <div className="text-xs font-mono text-[#8c909f]">
+            Builder: <a href="https://x.com/dexi269" target="_blank" rel="noopener noreferrer" className="hover:text-[#adc6ff] transition-colors underline decoration-[#424754] underline-offset-4">@dexi269</a>
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }
