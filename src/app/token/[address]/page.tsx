@@ -158,6 +158,7 @@ export default function TokenTradePage({ params }: { params: Promise<{ address: 
           { indexed: true, name: "tokenAddress", type: "address" },
           { indexed: false, name: "name", type: "string" },
           { indexed: false, name: "symbol", type: "string" },
+          { indexed: false, name: "supply", type: "uint256" },
           { indexed: false, name: "metadataURI", type: "string" },
           { indexed: false, name: "timestamp", type: "uint256" },
         ],

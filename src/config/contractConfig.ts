@@ -174,6 +174,7 @@ export const FACTORY_ABI = [
       { "indexed": true, "internalType": "address", "name": "tokenAddress", "type": "address" },
       { "indexed": false, "internalType": "string", "name": "name", "type": "string" },
       { "indexed": false, "internalType": "string", "name": "symbol", "type": "string" },
+      { "indexed": false, "internalType": "uint256", "name": "supply", "type": "uint256" },
       { "indexed": false, "internalType": "string", "name": "metadataURI", "type": "string" },
       { "indexed": false, "internalType": "uint256", "name": "timestamp", "type": "uint256" }
     ],
