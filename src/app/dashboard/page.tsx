@@ -1,11 +1,11 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import Link from "next/link";
 import { motion } from "framer-motion";
-import { useAccount, useBalance, useReadContract } from "wagmi";
+import { useAccount, useBalance, useReadContract, useReadContracts, usePublicClient } from "wagmi";
 import { formatUnits } from "viem";
-import { FACTORY_ADDRESS, FACTORY_ABI } from "@/config/contractConfig";
+import { FACTORY_ADDRESS, FACTORY_ABI, ERC20_ABI, USDC_ADDRESS } from "@/config/contractConfig";
 import { useAppKit } from "@reown/appkit/react";
 import ArcCatMascot from "@/components/ArcCatMascot";
 import {
@@ -20,23 +20,191 @@ import {
   Construction
 } from "lucide-react";
 
+// ─── Dashboard Token Card ──────────────────────────────────────────────────
+function DashboardTokenCard({ tokenAddress }: { tokenAddress: string }) {
+  const { data: name } = useReadContract({
+    address: tokenAddress as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "name" as any,
+  });
+
+  const { data: symbol } = useReadContract({
+    address: tokenAddress as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "symbol" as any,
+  });
+
+  const nameStr = (name as string) ?? "Loading...";
+  const symbolStr = (symbol as string) ?? "...";
+
+  return (
+    <Link
+      href={`/token/${tokenAddress}`}
+      className="bg-[#1b1b1b] border border-[#424754] rounded-2xl p-4 flex items-center justify-between hover:-translate-y-1 hover:border-[#adc6ff]/50 transition-all group"
+    >
+      <div className="flex items-center gap-3">
+        <div className="w-10 h-10 rounded-xl border border-[#424754] flex items-center justify-center bg-[#131313] overflow-hidden shrink-0 group-hover:bg-[#adc6ff]/10 transition-colors">
+          <span className="font-mono text-base text-[#adc6ff] font-bold">
+            {symbolStr?.charAt(0) ?? "?"}
+          </span>
+        </div>
+        <div>
+          <h3 className="font-marker text-base text-[#ece1d5] line-clamp-1">{nameStr}</h3>
+          <span className="font-mono text-xs text-[#adc6ff]">${symbolStr}</span>
+        </div>
+      </div>
+      <div className="flex items-center justify-center w-8 h-8 rounded-full bg-[#131313] border border-[#424754] group-hover:bg-[#adc6ff] group-hover:text-blue-950 text-[#8c909f] transition-all">
+        <ArrowUpRight size={14} />
+      </div>
+    </Link>
+  );
+}
+
+// ─── Live Feed Item ────────────────────────────────────────────────────────
+function LiveFeedItem({ tokenAddress }: { tokenAddress: string }) {
+  const { data: name } = useReadContract({
+    address: tokenAddress as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "name" as any,
+  });
+
+  const { data: symbol } = useReadContract({
+    address: tokenAddress as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "symbol" as any,
+  });
+
+  const nameStr = (name as string) ?? "Loading...";
+  const symbolStr = (symbol as string) ?? "...";
+
+  return (
+    <div className="flex items-start gap-3 border-b border-[#424754]/50 pb-3 last:border-0 last:pb-0">
+      <div className="mt-1 w-2 h-2 rounded-full bg-green-500 shrink-0 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
+      <div>
+        <p className="text-xs font-mono text-[#ece1d5]">
+          <span className="text-[#adc6ff]">${symbolStr}</span> ({nameStr}) was forged!
+        </p>
+        <p className="text-[10px] font-mono text-[#8c909f] mt-1 break-all">
+          Contract: {tokenAddress}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Main Dashboard Page ───────────────────────────────────────────────────
 export default function DashboardPage() {
   const { open } = useAppKit();
   const { address, isConnected } = useAccount();
-  const { data: balanceData } = useBalance({ address });
+  const publicClient = usePublicClient();
+
+  // Note: we fetch USDC balance instead of native ETH balance to match Arc Testnet context
+  const { data: usdcBalanceRaw } = useReadContract({
+    address: USDC_ADDRESS as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "balanceOf",
+    args: [address ?? "0x0000000000000000000000000000000000000000"],
+    query: { enabled: !!address },
+  });
+
+  const usdcBalance = usdcBalanceRaw ? formatUnits(usdcBalanceRaw as bigint, 6) : "0.0000";
 
   const [catState, setCatState] = useState<"bubble" | "happy" | "thinking">("bubble");
-
-  const totalMarketCap = 0;
+  const [totalTradesCount, setTotalTradesCount] = useState(0);
   
-  const { data: totalLaunchesData } = useReadContract({
+  const { data: allTokensRaw } = useReadContract({
     address: FACTORY_ADDRESS as `0x${string}`,
     abi: FACTORY_ABI,
-    functionName: "getTotalLaunches",
+    functionName: "getAllTokens",
   });
   
-  const activeCoinsCount = Number(totalLaunchesData || 0);
-  const totalTradesCount = 0;
+  const allTokens = Array.isArray(allTokensRaw) ? [...allTokensRaw].reverse() : [];
+  const activeCoinsCount = allTokens.length;
+
+  const { data: curveStates } = useReadContracts({
+    contracts: allTokens.map((addr) => ({
+      address: FACTORY_ADDRESS as `0x${string}`,
+      abi: FACTORY_ABI,
+      functionName: "getCurveState",
+      args: [addr],
+    })),
+  });
+
+  const totalMarketCap = (curveStates ?? []).reduce((acc, result) => {
+    if (result.status === "success" && result.result) {
+      const curve = result.result as any;
+      const price = Number(formatUnits(curve.virtualUsdcReserve, 6)) / Number(formatUnits(curve.virtualTokenReserve, 18));
+      return acc + (price * 1_000_000_000);
+    }
+    return acc;
+  }, 0);
+
+  // Fetch recent trades for the counter
+  useEffect(() => {
+    if (!publicClient) return;
+    let cancelled = false;
+
+    const fetchTrades = async () => {
+      try {
+        const currentBlock = await publicClient.getBlockNumber();
+        const CHUNK_SIZE = 10000n;
+        const MAX_BLOCKS = 100000n;
+        const startBlock = currentBlock > MAX_BLOCKS ? currentBlock - MAX_BLOCKS : 0n;
+
+        let buyCount = 0;
+        let sellCount = 0;
+
+        for (let b = currentBlock; b >= startBlock; b -= CHUNK_SIZE) {
+          if (cancelled) break;
+          const fromB = (b - CHUNK_SIZE < startBlock) ? startBlock : (b - CHUNK_SIZE + 1n);
+          
+          try {
+            const buys = await publicClient.getLogs({
+              address: FACTORY_ADDRESS as `0x${string}`,
+              event: {
+                type: "event",
+                name: "TokensBought",
+                inputs: [
+                  { indexed: true, name: "token", type: "address" },
+                  { indexed: true, name: "buyer", type: "address" },
+                  { indexed: false, name: "usdcIn", type: "uint256" },
+                  { indexed: false, name: "tokenOut", type: "uint256" },
+                  { indexed: false, name: "newPrice", type: "uint256" },
+                  { indexed: false, name: "fee", type: "uint256" }
+                ],
+              },
+              fromBlock: fromB,
+              toBlock: b,
+            });
+            buyCount += buys.length;
+
+            const sells = await publicClient.getLogs({
+              address: FACTORY_ADDRESS as `0x${string}`,
+              event: {
+                type: "event",
+                name: "TokensSold",
+                inputs: [
+                  { indexed: true, name: "token", type: "address" },
+                  { indexed: true, name: "seller", type: "address" },
+                  { indexed: false, name: "tokenIn", type: "uint256" },
+                  { indexed: false, name: "usdcOut", type: "uint256" },
+                  { indexed: false, name: "newPrice", type: "uint256" },
+                  { indexed: false, name: "fee", type: "uint256" }
+                ],
+              },
+              fromBlock: fromB,
+              toBlock: b,
+            });
+            sellCount += sells.length;
+          } catch (e) {}
+        }
+        if (!cancelled) setTotalTradesCount(buyCount + sellCount);
+      } catch (e) {}
+    };
+
+    fetchTrades();
+    return () => { cancelled = true; };
+  }, [publicClient]);
 
   const truncateAddress = (addr: string) => {
     return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
@@ -147,7 +315,7 @@ export default function DashboardPage() {
           </div>
           <div className="mt-4">
             <div className="text-3xl font-marker text-[#ece1d5]">
-              {isConnected ? `${balanceData ? Number(formatUnits(balanceData.value, balanceData.decimals)).toFixed(4) : "0.0000"} USDC` : "0.00 USDC"}
+              {isConnected ? `${Number(usdcBalance).toFixed(4)} USDC` : "0.00 USDC"}
             </div>
             <span className="text-[11px] font-mono text-[#8c909f]">
               {isConnected ? "Arc Testnet Connected" : "Disconnected"}
@@ -167,37 +335,51 @@ export default function DashboardPage() {
             </Link>
           </div>
 
-          <div className="sketch-card p-12 flex flex-col items-center justify-center text-center space-y-4 border-dashed h-[300px]">
-            <Construction size={40} className="text-[#8c909f]" />
-            <h3 className="font-marker text-xl text-[#ece1d5]">No Tokens Launched Yet</h3>
-            <p className="text-sm font-sketch text-[#8c909f] max-w-sm">
-              The Arc One Factory contract is being prepared. Once live, the trending algorithms will index tokens automatically.
-            </p>
-          </div>
+          {allTokens.length === 0 ? (
+            <div className="sketch-card p-12 flex flex-col items-center justify-center text-center space-y-4 border-dashed h-[300px]">
+              <Construction size={40} className="text-[#8c909f]" />
+              <h3 className="font-marker text-xl text-[#ece1d5]">No Tokens Launched Yet</h3>
+              <p className="text-sm font-sketch text-[#8c909f] max-w-sm">
+                The Arc One Factory contract is being prepared. Once live, the trending algorithms will index tokens automatically.
+              </p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              {allTokens.slice(0, 6).map((addr) => (
+                <DashboardTokenCard key={addr} tokenAddress={addr} />
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Live Feed */}
-        <div className="sketch-card-secondary p-6 space-y-6">
-          <div className="flex items-center gap-2 border-b border-dashed border-[#8c909f]/30 pb-4">
-            <div className="w-2.5 h-2.5 rounded-full bg-red-500/50" />
+        <div className="sketch-card-secondary p-6 space-y-6 flex flex-col min-h-[300px]">
+          <div className="flex items-center gap-2 border-b border-dashed border-[#8c909f]/30 pb-4 shrink-0">
+            <div className="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)] animate-pulse" />
             <h2 className="font-marker text-xl text-[#ece1d5]">Live Laboratory Feed</h2>
           </div>
 
-          <div className="flex flex-col items-center justify-center text-center h-[240px] space-y-3 opacity-60">
-            <ActivityIcon size={32} className="text-[#8c909f]" />
-            <p className="text-xs font-mono text-[#8c909f]">Waiting for on-chain events...</p>
+          <div className="flex-1 overflow-y-auto pr-2 space-y-4 custom-scrollbar">
+            {allTokens.length === 0 ? (
+              <div className="flex flex-col items-center justify-center text-center h-full space-y-3 opacity-60">
+                <ActivityIcon size={32} className="text-[#8c909f]" />
+                <p className="text-xs font-mono text-[#8c909f]">Waiting for on-chain events...</p>
+              </div>
+            ) : (
+              allTokens.slice(0, 5).map((addr) => <LiveFeedItem key={addr} tokenAddress={addr} />)
+            )}
           </div>
 
-          <div className="pt-2">
+          <div className="pt-4 mt-auto border-t border-[#8c909f]/20 shrink-0">
             <button
               onClick={() => {
                 const states: Array<"bubble" | "happy" | "thinking"> = ["bubble", "happy", "thinking"];
                 const next = states[(states.indexOf(catState) + 1) % states.length];
                 setCatState(next);
               }}
-              className="w-full sketch-btn text-xs text-[#8c909f] hover:text-[#adc6ff] py-1.5 flex items-center justify-center gap-1.5"
+              className="w-full sketch-btn text-xs text-[#8c909f] hover:text-[#adc6ff] py-2 flex items-center justify-center gap-1.5 bg-[#131313] border border-[#424754] rounded-xl transition-all"
             >
-              <Heart size={12} className="text-red-400" />
+              <Heart size={14} className="text-red-400" />
               <span>Poke Mascot Cat</span>
             </button>
           </div>

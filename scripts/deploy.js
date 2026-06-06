@@ -3,22 +3,38 @@ import hre from "hardhat";
 async function main() {
   console.log("Starting deployment to Arc Testnet...");
   
-  // Get the contract factory
+  // Get the contract factories
   const ArcOneFactory = await hre.ethers.getContractFactory("ArcOneFactory");
+  const ArcDexFactory = await hre.ethers.getContractFactory("ArcDexFactory");
   
-  // Deploy the contract
+  // Deploy ArcOneFactory
   console.log("Deploying ArcOneFactory...");
   const factory = await ArcOneFactory.deploy();
   
   // Wait for the deployment to finish
-  // Using ethers v6 syntax (adjust to factory.deployed() and factory.address if ethers v5)
+  let factoryAddress;
   if (factory.waitForDeployment) {
     await factory.waitForDeployment();
-    console.log(`ArcOneFactory deployed successfully to: ${await factory.getAddress()}`);
+    factoryAddress = await factory.getAddress();
   } else {
     await factory.deployed();
-    console.log(`ArcOneFactory deployed successfully to: ${factory.address}`);
+    factoryAddress = factory.address;
   }
+  console.log(`ArcOneFactory deployed successfully to: ${factoryAddress}`);
+
+  // Deploy ArcDexFactory
+  console.log("Deploying ArcDexFactory...");
+  const dexFactory = await ArcDexFactory.deploy();
+  
+  let dexFactoryAddress;
+  if (dexFactory.waitForDeployment) {
+    await dexFactory.waitForDeployment();
+    dexFactoryAddress = await dexFactory.getAddress();
+  } else {
+    await dexFactory.deployed();
+    dexFactoryAddress = dexFactory.address;
+  }
+  console.log(`ArcDexFactory deployed successfully to: ${dexFactoryAddress}`);
 }
 
 main().catch((error) => {

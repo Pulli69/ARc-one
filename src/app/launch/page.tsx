@@ -2,43 +2,91 @@
 
 import React, { useState, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
+import { useAccount, useWriteContract, useWaitForTransactionReceipt, useReadContract, usePublicClient } from "wagmi";
+import { parseUnits } from "viem";
 import ArcCatMascot from "@/components/ArcCatMascot";
-import { FACTORY_ADDRESS, FACTORY_ABI } from "@/config/contractConfig";
+import { FACTORY_ADDRESS, FACTORY_ABI, USDC_ADDRESS, ERC20_ABI } from "@/config/contractConfig";
 import { motion, AnimatePresence } from "framer-motion";
 import { PenTool, CheckCircle2, Shield, AlertCircle, Link as LinkIcon, MessageCircle } from "lucide-react";
 
 export default function LaunchPage() {
   const router = useRouter();
-  const { isConnected } = useAccount();
+  const { address, isConnected } = useAccount();
+  const publicClient = usePublicClient();
 
   const [name, setName] = useState("");
   const [symbol, setSymbol] = useState("");
   const [description, setDescription] = useState("");
-  const [supply, setSupply] = useState("1000000000");
+  // Supply is hardcoded to 1,000,000,000 in the new ArcPumpFactory contract
 
   const [isLaunching, setIsLaunching] = useState(false);
   const [launchSuccess, setLaunchSuccess] = useState(false);
+  // Tracks which step we are on: idle | approving | launching
+  const [launchStep, setLaunchStep] = useState<"idle" | "approving" | "launching">("idle");
 
   const { writeContractAsync, data: txHash } = useWriteContract();
-  const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
+  const { data: receipt, isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
     hash: txHash,
   });
 
-  // Watch for transaction success
-  React.useEffect(() => {
-    if (isConfirmed) {
-      setIsLaunching(false);
-      setLaunchSuccess(true);
-      setTimeout(() => setLaunchSuccess(false), 3500);
-    }
-  }, [isConfirmed]);
+  // Read the launch fee from the contract
+  const { data: launchFeeRaw } = useReadContract({
+    address: FACTORY_ADDRESS as `0x${string}`,
+    abi: FACTORY_ABI,
+    functionName: "launchFee",
+  });
+  const launchFee = (launchFeeRaw as bigint) ?? BigInt(100000); // default 0.1 USDC (6 dec)
+
+  // Read current USDC allowance granted to the factory
+  const { data: allowanceRaw, refetch: refetchAllowance } = useReadContract({
+    address: USDC_ADDRESS as `0x${string}`,
+    abi: ERC20_ABI,
+    functionName: "allowance",
+    args: [address ?? "0x0000000000000000000000000000000000000000", FACTORY_ADDRESS as `0x${string}`],
+    query: { enabled: !!address },
+  });
+  const currentAllowance = (allowanceRaw as bigint) ?? BigInt(0);
+
+  const [deployedTokenAddress, setDeployedTokenAddress] = useState<string | null>(null);
 
   const [showLogoOptions, setShowLogoOptions] = useState(false);
   const [logoImage, setLogoImage] = useState<string | null>(null);
   const [isDrawing, setIsDrawing] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [isDrawingMouse, setIsDrawingMouse] = useState(false);
+
+  // Watch for transaction success
+  React.useEffect(() => {
+    if (isConfirmed && receipt) {
+      let tokenAddr = null;
+      const factoryLog = receipt.logs.find(
+        (log: any) => log.address.toLowerCase() === (FACTORY_ADDRESS as string).toLowerCase() && log.topics.length >= 3
+      );
+
+      if (factoryLog && factoryLog.topics[2]) {
+        tokenAddr = "0x" + factoryLog.topics[2].slice(26);
+        setDeployedTokenAddress(tokenAddr);
+      }
+
+      setIsLaunching(false);
+      setLaunchSuccess(true);
+
+      if (tokenAddr && typeof window !== 'undefined' && (window as any).ethereum) {
+        (window as any).ethereum.request({
+          method: 'wallet_watchAsset',
+          params: {
+            type: 'ERC20',
+            options: {
+              address: tokenAddr,
+              symbol: symbol,
+              decimals: 18,
+              image: logoImage || "",
+            },
+          },
+        }).catch(console.error);
+      }
+    }
+  }, [isConfirmed, receipt, symbol, logoImage]);
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -103,24 +151,47 @@ export default function LaunchPage() {
   const handleLaunch = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!isConnected) return alert("Please connect wallet first!");
+    if (!publicClient) return;
 
     setIsLaunching(true);
+    setLaunchStep("idle");
 
     try {
       const metadataObj = { description, image: logoImage || "" };
       const metadataURI = JSON.stringify(metadataObj);
 
+      // ── Step 1: Check USDC allowance ────────────────────────────────────
+      const { data: freshAllowance } = await refetchAllowance();
+      const allowance = (freshAllowance as bigint) ?? BigInt(0);
+
+      if (allowance < launchFee) {
+        // ── Step 2: Approve USDC ───────────────────────────────────────────
+        setLaunchStep("approving");
+        const approveTx = await writeContractAsync({
+          address: USDC_ADDRESS as `0x${string}`,
+          abi: ERC20_ABI,
+          functionName: "approve",
+          args: [FACTORY_ADDRESS as `0x${string}`, launchFee],
+        });
+
+        // Wait for approval to be confirmed on-chain
+        await publicClient.waitForTransactionReceipt({ hash: approveTx });
+      }
+
+      // ── Step 3: Launch the memecoin ────────────────────────────────────
+      setLaunchStep("launching");
       await writeContractAsync({
         address: FACTORY_ADDRESS as `0x${string}`,
         abi: FACTORY_ABI,
         functionName: "launchMemecoin",
-        args: [name, symbol, BigInt(supply), metadataURI],
+        args: [name, symbol, metadataURI],
       });
-      // The useEffect will handle the success state once confirmed
-    } catch (error) {
+      // The useEffect will handle success state once launchMemecoin is confirmed
+    } catch (error: any) {
       console.error(error);
       setIsLaunching(false);
-      alert("Failed to launch token. Check console for details.");
+      setLaunchStep("idle");
+      alert(error?.shortMessage || error?.message || "Failed to launch token. Check console for details.");
     }
   };
 
@@ -219,34 +290,13 @@ export default function LaunchPage() {
               </div>
             </div>
 
-            {/* Supply */}
+            {/* Supply (read-only — fixed at 1B) */}
             <div className="space-y-2">
               <label className="text-xs font-sketch text-[#ece1d5]">Total Supply</label>
-              <input
-                required
-                type="number"
-                min="1"
-                value={supply}
-                onChange={(e) => setSupply(e.target.value)}
-                className="w-full bg-[#1b1b1b]/80 border border-[#424754] rounded-lg px-4 py-2.5 text-sm font-mono text-[#ece1d5] placeholder-[#8c909f] focus:outline-none focus:border-[#adc6ff]"
-              />
-              <div className="flex gap-2 mt-1">
-                <button
-                  type="button"
-                  onClick={() => setSupply("1000000000")}
-                  className="px-3 py-1 bg-[#242424] border border-[#424754] rounded text-xs font-mono text-[#8c909f] hover:text-[#adc6ff] hover:border-[#adc6ff] transition-colors"
-                >
-                  1 Billion
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setSupply("10000000000")}
-                  className="px-3 py-1 bg-[#242424] border border-[#424754] rounded text-xs font-mono text-[#8c909f] hover:text-[#adc6ff] hover:border-[#adc6ff] transition-colors"
-                >
-                  10 Billion
-                </button>
+              <div className="w-full bg-[#131313] border border-[#424754] rounded-lg px-4 py-2.5 text-sm font-mono text-[#8c909f] cursor-not-allowed">
+                1,000,000,000
               </div>
-              <p className="text-[11px] font-sketch text-[#8c909f] italic">Define your total token supply. Minting is disabled post-launch.</p>
+              <p className="text-[11px] font-sketch text-[#8c909f] italic">Supply is fixed at 1,000,000,000 tokens — hardcoded in the contract.</p>
             </div>
 
             {/* Description */}
@@ -364,7 +414,7 @@ export default function LaunchPage() {
               <div className="grid grid-cols-2 gap-3">
                 <div className="bg-[#1b1b1b] border border-[#424754] rounded-lg p-3">
                   <span className="text-[10px] font-sketch text-[#8c909f] block">Max Supply</span>
-                  <span className="font-mono text-xs text-[#ece1d5] mt-1 block">{formatSupply(supply)}</span>
+                  <span className="font-mono text-xs text-[#ece1d5] mt-1 block">1,000,000,000</span>
                 </div>
                 <div className="bg-[#1b1b1b] border border-[#424754] rounded-lg p-3">
                   <span className="text-[10px] font-sketch text-[#8c909f] block">Workshop</span>
@@ -412,11 +462,30 @@ export default function LaunchPage() {
               <div className="absolute inset-0 bg-grid-white/[0.02] pointer-events-none" />
 
               {isLaunching ? (
-                <div className="space-y-4 relative z-10">
+                <div className="space-y-5 relative z-10">
                   <div className="w-16 h-16 border-4 border-[#adc6ff] border-t-transparent rounded-full animate-spin mx-auto" />
-                  <h3 className="font-marker text-xl text-[#ece1d5]">Deploying Factory</h3>
+
+                  {/* Step indicator */}
+                  <div className="flex items-center justify-center gap-3">
+                    <div className={`flex items-center gap-1.5 text-xs font-mono px-3 py-1.5 rounded-full border ${launchStep === "approving" ? "bg-[#adc6ff]/20 border-[#adc6ff] text-[#adc6ff]" : launchStep === "launching" ? "bg-green-950/30 border-green-600 text-green-400" : "bg-[#131313] border-[#424754] text-[#8c909f]"}`}>
+                      {launchStep === "launching" ? <CheckCircle2 size={10} /> : null}
+                      Step 1: Approve USDC
+                    </div>
+                    <span className="text-[#424754]">→</span>
+                    <div className={`flex items-center gap-1.5 text-xs font-mono px-3 py-1.5 rounded-full border ${launchStep === "launching" ? "bg-[#adc6ff]/20 border-[#adc6ff] text-[#adc6ff]" : "bg-[#131313] border-[#424754] text-[#8c909f]"}`}>
+                      Step 2: Launch Token
+                    </div>
+                  </div>
+
+                  <h3 className="font-marker text-xl text-[#ece1d5]">
+                    {launchStep === "approving" ? "Approving USDC..." : launchStep === "launching" ? "Launching Memecoin..." : "Preparing..."}
+                  </h3>
                   <p className="text-xs text-[#bec6e0] leading-relaxed">
-                    Executing Arc One Factory contract deployment... Please confirm in your wallet.
+                    {launchStep === "approving"
+                      ? "Please confirm the USDC approval in your wallet. This allows the factory to collect the launch fee."
+                      : launchStep === "launching"
+                      ? "USDC approved! Now confirm the launch transaction in your wallet."
+                      : "Checking your USDC allowance..."}
                   </p>
                 </div>
               ) : (
@@ -428,6 +497,68 @@ export default function LaunchPage() {
                   <p className="text-xs text-[#bec6e0] leading-relaxed">
                     Your memecoin was successfully forged on the Arc Testnet.
                   </p>
+
+                  {/* Token Details */}
+                  <div className="bg-[#131313] border border-[#424754] rounded-lg p-4 space-y-2 text-left">
+                    <div className="flex justify-between text-xs">
+                      <span className="text-[#8c909f] font-sketch">Name</span>
+                      <span className="text-[#ece1d5] font-mono">{name}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-[#8c909f] font-sketch">Symbol</span>
+                      <span className="text-[#adc6ff] font-mono">${symbol}</span>
+                    </div>
+                    <div className="flex justify-between text-xs">
+                      <span className="text-[#8c909f] font-sketch">Total Supply</span>
+                      <span className="text-[#ece1d5] font-mono">1,000,000,000</span>
+                    </div>
+                    {deployedTokenAddress && (
+                      <div className="pt-2 border-t border-[#424754]/50">
+                        <span className="text-[#8c909f] font-sketch text-xs block mb-1">Contract Address</span>
+                        <span className="text-[#adc6ff] font-mono text-xs break-all">{deployedTokenAddress}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Add to MetaMask Button */}
+                  {deployedTokenAddress && (
+                    <button
+                      onClick={() => {
+                        if (typeof window !== 'undefined' && (window as any).ethereum) {
+                          (window as any).ethereum.request({
+                            method: 'wallet_watchAsset',
+                            params: {
+                              type: 'ERC20',
+                              options: {
+                                address: deployedTokenAddress,
+                                symbol: symbol,
+                                decimals: 18,
+                                image: logoImage || "",
+                              },
+                            },
+                          }).catch(console.error);
+                        }
+                      }}
+                      className="w-full py-2 bg-[#242424] border border-[#424754] rounded-lg text-xs font-mono text-[#bec6e0] hover:text-[#ece1d5] hover:border-[#adc6ff] transition-colors flex items-center justify-center gap-2"
+                    >
+                      🦊 Add to MetaMask
+                    </button>
+                  )}
+
+                  <div className="flex gap-3 pt-2">
+                    <button
+                      onClick={() => setLaunchSuccess(false)}
+                      className="flex-1 py-2.5 bg-[#242424] text-[#8c909f] hover:text-[#ece1d5] border border-[#424754] rounded-lg font-sans text-sm transition-colors"
+                    >
+                      Close
+                    </button>
+                    <button
+                      disabled
+                      className="flex-1 py-2.5 bg-[#adc6ff]/50 text-blue-950/50 font-bold font-sans text-sm rounded-lg cursor-not-allowed"
+                    >
+                      List on DEX (Coming Soon)
+                    </button>
+                  </div>
                 </div>
               )}
             </motion.div>
