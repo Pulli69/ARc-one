@@ -143,48 +143,32 @@ export default function TokenTradePage({ params }: { params: Promise<{ address: 
   const tokenBalance = tokenBalanceRaw ? formatUnits(tokenBalanceRaw as bigint, 18) : "0";
   const usdcBalance = usdcBalanceRaw ? formatUnits(usdcBalanceRaw as bigint, 6) : "0";
 
-  // ─── Fetch extra metadata (description/image/creator) from event logs ────
+  const { data: metadataURIRaw } = useReadContract({
+    address: tokenAddress as `0x${string}`,
+    abi: [{ name: 'metadataURI', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] }] as const,
+    functionName: 'metadataURI',
+  });
+
+  const { data: creatorRaw } = useReadContract({
+    address: tokenAddress as `0x${string}`,
+    abi: [{ name: 'creator', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }] as const,
+    functionName: 'creator',
+  });
+
   useEffect(() => {
-    if (!publicClient || !tokenAddress) return;
-    let cancelled = false;
-
-    publicClient.getLogs({
-      address: FACTORY_ADDRESS as `0x${string}`,
-      event: {
-        type: "event",
-        name: "TokenCreated",
-        inputs: [
-          { indexed: true, name: "creator", type: "address" },
-          { indexed: true, name: "tokenAddress", type: "address" },
-          { indexed: false, name: "name", type: "string" },
-          { indexed: false, name: "symbol", type: "string" },
-          { indexed: false, name: "supply", type: "uint256" },
-          { indexed: false, name: "metadataURI", type: "string" },
-          { indexed: false, name: "timestamp", type: "uint256" },
-        ],
-      },
-      args: { tokenAddress: tokenAddress as `0x${string}` },
-      fromBlock: BigInt(0),
-      toBlock: "latest",
-    }).then((logs) => {
-      if (cancelled || !logs[0]) return;
-      const { metadataURI, creator } = (logs[0] as any).args;
-      let description: string | undefined;
-      let image: string | undefined;
-      try {
-        const m = JSON.parse(metadataURI);
-        description = m.description || metadataURI;
-        image = m.image;
-      } catch {
-        description = metadataURI;
-      }
-      if (!cancelled) setMetaExtra({ description, image, creator });
-    }).catch((err) => {
-      console.error("Error fetching TokenCreated logs:", err);
-    });
-
-    return () => { cancelled = true; };
-  }, [publicClient, tokenAddress]);
+    if (!metadataURIRaw) return;
+    const metadataURI = metadataURIRaw as string;
+    let description: string | undefined;
+    let image: string | undefined;
+    try {
+      const m = JSON.parse(metadataURI);
+      description = m.description || metadataURI;
+      image = m.image;
+    } catch {
+      description = metadataURI;
+    }
+    setMetaExtra({ description, image, creator: creatorRaw as string });
+  }, [metadataURIRaw, creatorRaw]);
 
 
   // ─── Execute buy ──────────────────────────────────────────────────────────

@@ -21,50 +21,34 @@ function TokenCard({ tokenAddress, searchQuery }: { tokenAddress: string; search
     functionName: "symbol" as any,
   });
 
-  // Try to get metadata from the factory curve state (metadataURI is in the TokenCreated event)
-  // Fallback: read from a local cache set during launch
+  const { data: metadataURIRaw } = useReadContract({
+    address: tokenAddress as `0x${string}`,
+    abi: [{ name: 'metadataURI', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] }] as const,
+    functionName: 'metadataURI',
+  });
+
+  const { data: creatorRaw } = useReadContract({
+    address: tokenAddress as `0x${string}`,
+    abi: [{ name: 'creator', type: 'function', stateMutability: 'view', inputs: [], outputs: [{ type: 'address' }] }] as const,
+    functionName: 'creator',
+  });
+
   const [meta, setMeta] = useState<{ description?: string; image?: string; creator?: string; timestamp?: number }>({});
-  const publicClient = usePublicClient();
 
   useEffect(() => {
-    if (!publicClient || !tokenAddress) return;
-    let cancelled = false;
-    publicClient.getLogs({
-      address: FACTORY_ADDRESS as `0x${string}`,
-      event: {
-        type: "event",
-        name: "TokenCreated",
-        inputs: [
-          { indexed: true, name: "creator", type: "address" },
-          { indexed: true, name: "tokenAddress", type: "address" },
-          { indexed: false, name: "name", type: "string" },
-          { indexed: false, name: "symbol", type: "string" },
-          { indexed: false, name: "supply", type: "uint256" },
-          { indexed: false, name: "metadataURI", type: "string" },
-          { indexed: false, name: "timestamp", type: "uint256" },
-        ],
-      },
-      args: { tokenAddress: tokenAddress as `0x${string}` },
-      fromBlock: BigInt(0),
-      toBlock: "latest",
-    }).then((logs) => {
-      if (cancelled || !logs[0]) return;
-      const { metadataURI, creator, timestamp } = (logs[0] as any).args;
-      let description: string | undefined;
-      let image: string | undefined;
-      try {
-        const m = JSON.parse(metadataURI);
-        description = m.description || metadataURI;
-        image = m.image;
-      } catch {
-        description = metadataURI;
-      }
-      if (!cancelled) setMeta({ description, image, creator, timestamp: Number(timestamp) });
-    }).catch((err) => {
-      console.error("Error fetching TokenCreated logs:", err);
-    });
-    return () => { cancelled = true; };
-  }, [publicClient, tokenAddress]);
+    if (!metadataURIRaw) return;
+    const metadataURI = metadataURIRaw as string;
+    let description: string | undefined;
+    let image: string | undefined;
+    try {
+      const m = JSON.parse(metadataURI);
+      description = m.description || metadataURI;
+      image = m.image;
+    } catch {
+      description = metadataURI;
+    }
+    setMeta({ description, image, creator: creatorRaw as string, timestamp: 0 });
+  }, [metadataURIRaw, creatorRaw]);
 
   // Read curve state & progress
   const { data: curveStateRaw } = useReadContract({
