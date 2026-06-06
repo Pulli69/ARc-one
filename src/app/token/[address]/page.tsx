@@ -171,16 +171,16 @@ export default function TokenTradePage({ params }: { params: Promise<{ address: 
       let description: string | undefined;
       let image: string | undefined;
       try {
-        if (metadataURI?.startsWith("{")) {
-          const m = JSON.parse(metadataURI);
-          description = m.description;
-          image = m.image;
-        } else {
-          description = metadataURI;
-        }
-      } catch {}
+        const m = JSON.parse(metadataURI);
+        description = m.description || metadataURI;
+        image = m.image;
+      } catch {
+        description = metadataURI;
+      }
       if (!cancelled) setMetaExtra({ description, image, creator });
-    }).catch(() => {}); // silently ignore RPC range errors
+    }).catch((err) => {
+      console.error("Error fetching TokenCreated logs:", err);
+    });
 
     return () => { cancelled = true; };
   }, [publicClient, tokenAddress]);
