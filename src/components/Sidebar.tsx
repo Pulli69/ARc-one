@@ -27,7 +27,7 @@ export default function Sidebar() {
   const navItems = [
     { name: "Home", href: "/dashboard", icon: Home },
     { name: "Launch Memecoin", href: "/launch", icon: Rocket, doodle: "rocket" },
-    { name: "Arc Identity", href: "/identity", icon: User },
+    { name: "ARC Testnet Stats", href: "/identity", icon: User },
     { name: "My Memecoins", href: "/my-memecoin", icon: Coins },
     { name: "Explore", href: "/explore", icon: Compass, doodle: "telescope" },
     { name: "Leaderboard", href: "/leaderboard", icon: Trophy },
